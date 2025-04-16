@@ -46,11 +46,11 @@
 
   .manual-start-btn {
     position: fixed;
-    bottom: 50%;
+    bottom: 10%;
     left: 50%;
     transform: translate(-50%, 50%);
     padding: 15px 30px;
-    background-color: #4CAF50;
+    background-color: #4F3B16;
     color: white;
     border: none;
     border-radius: 5px;
@@ -83,7 +83,7 @@
     <div>正在加载AR模型，请稍候...<br><span id="loading-status"></span><div id="loading-progress">0%</div></div>
   </div>
   
-  <button id="manual-start" class="manual-start-btn">手动开始AR</button>
+  <button id="manual-start" class="manual-start-btn">开始识别</button>
   
   <div id="debug-info" class="debug-info">状态: 初始化中...</div>
   
@@ -120,7 +120,7 @@
         <a-entity
             id="model-entity"
             gltf-model="model/py/scene.gltf"
-            scale="1 1 1"
+            scale="0.5 0.5 0.5"
             position="0 0 0"
             rotation="-90 0 0"
             material="opacity: 1; transparent: false; metalness: 0.5; roughness: 0.5"
@@ -183,7 +183,7 @@
   let positionIndex = 0;
   const positions = [
     {position: "0 0.5 0", scale: "1.5 1.5 1.5", rotation: "60 -10 0"},
-    {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"},
+    {position: "0 0.5 0", scale: "0.8 0.8 0.8", rotation: "60 -10 0"},
     {position: "0 0.5 0", scale: "1 1 1", rotation: "60 -10 0"},
     {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"},
     {position: "0 0.5 0", scale: "0.3 0.3 0.3", rotation: "60 -10 0"}
@@ -261,7 +261,8 @@
       // 强制隐藏加载界面并尝试继续
       arjsLoader.style.display = 'none';
       manualStartBtn.style.display = 'none';
-      debugInfo.innerHTML = "状态: 手动启动AR";
+      // debugInfo.innerHTML = "状态: 手动启动AR";
+	console.log('状态: 手动启动AR');
       
       // 直接显示备用模型
       setTimeout(() => {
