@@ -56,7 +56,7 @@
         <a-entity
             gltf-model="model/py/scene.gltf"
             scale="0.8 0.8 0.8"
-            position="20 20 0"
+            position="0 0 0"
 			rotation="-90 0 0"
         >
         </a-entity>
@@ -65,3 +65,12 @@
     <a-entity camera="fov: 190"></a-entity>
   </a-scene>
 </body>
+<script>
+  document.querySelector('a-nft').addEventListener('markerFound', () => {
+    console.log('🎯 marker found!');
+  });
+  document.querySelector('a-nft').addEventListener('markerLost', () => {
+    console.log('📭 marker lost!');
+  });
+</script>
+
