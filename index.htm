@@ -342,13 +342,14 @@
         debugInfo.innerHTML = "模型已加载，但可能未显示。尝试调整位置或使用强制显示按钮。";
         console.log('模型已加载，但可能未显示');
       }
-    }, 5000);
+    }, 1000);
   }
   
   // 模型加载事件
   document.addEventListener('model-loaded', (e) => {
     console.log('3D模型加载成功', e);
-    debugInfo.innerHTML = "状态: 3D模型加载成功";
+    // debugInfo.innerHTML = "状态: 3D模型加载成功";
+    console.log("状态: 3D模型加载成功");
     loadingStatus.innerHTML = "3D模型加载成功！";
     
     // 确保模型可见
