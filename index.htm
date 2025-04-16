@@ -4,6 +4,7 @@
 
 <head>
 	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 </head>
 
 <!-- style for the loader -->
@@ -26,21 +27,57 @@
     font-size: 1.25em;
     color: white;
   }
+  
+  .debug-info {
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    color: white;
+    background-color: rgba(0,0,0,0.7);
+    padding: 10px;
+    font-size: 14px;
+    z-index: 999;
+  }
+  
+  .error-message {
+    color: red;
+    font-weight: bold;
+  }
+
+  .manual-start-btn {
+    position: fixed;
+    bottom: 50%;
+    left: 50%;
+    transform: translate(-50%, 50%);
+    padding: 15px 30px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 18px;
+    cursor: pointer;
+    z-index: 10000;
+    display: none;
+  }
 </style>
 <script src="aframe-ar-nft.js"></script>
 
 <body style="margin : 0px; overflow: hidden;">
   <!-- minimal loader shown until image descriptors are loaded. Loading may take a while according to the device computational power -->
   <div class="arjs-loader">
-    <div>正在加载AR模型，请稍候...</div>
+    <div>正在加载AR模型，请稍候...<br><span id="loading-status"></span><div id="loading-progress">0%</div></div>
   </div>
+  
+  <button id="manual-start" class="manual-start-btn">手动开始AR</button>
+  
+  <div id="debug-info" class="debug-info">状态: 初始化中...</div>
 
   <!-- a-frame scene -->
-  <a-scene
+  <a-scene id="scene"
     vr-mode-ui="enabled: false;"
-    renderer="logarithmicDepthBuffer: true;"
+    renderer="logarithmicDepthBuffer: true; antialias: true; precision: mediump;"
     embedded
-    arjs="trackingMethod: best; sourceType: webcam;debugUIEnabled: false;"
+    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3; maxDetectionRate: 60; canvasWidth: 1280; canvasHeight: 960;"
   >
     <!-- a-nft is the anchor that defines an Image Tracking entity -->
     <!-- on 'url' use the path to the Image Descriptors created before. -->
@@ -49,29 +86,240 @@
       type="nft"
       url="descriptors/py/py"
       smooth="true"
-      smoothCount="10"
+      smoothCount="5"
       smoothTolerance=".01"
-      smoothThreshold="5"
+      smoothThreshold="3"
     >
         <!-- as a child of the a-nft entity, you can define the content to show. here's a GLTF model entity -->
         <a-entity
+            id="model-entity"
             gltf-model="model/py/scene.gltf"
             scale="0.8 0.8 0.8"
             position="0 0 0"
-			rotation="-90 0 0"
+            rotation="-90 0 0"
         >
         </a-entity>
     </a-nft>
     <!-- static camera that moves according to the device movemenents -->
-    <a-entity camera="fov: 190"></a-entity>
+    <a-entity camera="fov: 75; near: 0.1; far: 1000"></a-entity>
   </a-scene>
 </body>
 <script>
+  const debugInfo = document.getElementById('debug-info');
+  const loadingStatus = document.getElementById('loading-status');
+  const loadingProgress = document.getElementById('loading-progress');
+  const manualStartBtn = document.getElementById('manual-start');
+  const arjsLoader = document.querySelector('.arjs-loader');
+  let descriptorsLoaded = false;
+  let cameraReady = false;
+  let loadingTimeout = null;
+  
+  // 预加载NFT描述文件检查
+  function preloadDescriptors() {
+    loadingStatus.innerHTML = "预加载图像描述文件...";
+    
+    const files = [
+      'descriptors/py/py.fset',
+      'descriptors/py/py.fset3',
+      'descriptors/py/py.iset'
+    ];
+    
+    let loadedCount = 0;
+    
+    files.forEach(file => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', file, true);
+      xhr.onprogress = function(e) {
+        if (e.lengthComputable) {
+          const percentComplete = Math.round((e.loaded / e.total) * 100);
+          loadingProgress.innerHTML = `加载描述文件: ${percentComplete}%`;
+        }
+      };
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          loadedCount++;
+          loadingProgress.innerHTML = `已加载 ${loadedCount}/${files.length} 个描述文件`;
+          
+          if (loadedCount === files.length) {
+            descriptorsLoaded = true;
+            loadingStatus.innerHTML = "所有描述文件已加载，等待相机初始化...";
+            checkAllReady();
+          }
+        } else {
+          const errMsg = `描述文件 ${file} 加载失败: ${xhr.status}`;
+          console.error(errMsg);
+          loadingStatus.innerHTML = `<span class="error-message">${errMsg}</span>`;
+        }
+      };
+      xhr.onerror = function() {
+        const errMsg = `无法加载描述文件 ${file}. 请确保文件存在且可访问。`;
+        console.error(errMsg);
+        loadingStatus.innerHTML = `<span class="error-message">${errMsg}</span>`;
+        
+        // 显示手动开始按钮
+        showManualStart();
+      };
+      xhr.send();
+    });
+  }
+  
+  // 显示手动开始按钮
+  function showManualStart() {
+    manualStartBtn.style.display = 'block';
+    manualStartBtn.addEventListener('click', function() {
+      // 强制隐藏加载界面并尝试继续
+      arjsLoader.style.display = 'none';
+      manualStartBtn.style.display = 'none';
+      debugInfo.innerHTML = "状态: 手动启动AR";
+    });
+  }
+  
+  // 检查是否通过HTTP服务器访问
+  if (window.location.protocol === 'file:') {
+    const errorMsg = '⚠️ 错误：必须通过HTTP服务器访问此应用！<br>请使用本地服务器如 python -m http.server 8000 或 npx http-server';
+    debugInfo.innerHTML = '<span class="error-message">' + errorMsg + '</span>';
+    loadingStatus.innerHTML = '<span class="error-message">' + errorMsg + '</span>';
+    console.error('必须通过HTTP服务器访问此应用，不能直接打开本地文件。');
+    console.error('建议使用: python -m http.server 8000 启动本地服务器');
+  } else {
+    // 设置加载超时
+    loadingTimeout = setTimeout(function() {
+      loadingStatus.innerHTML = "加载时间过长，可能存在问题。<br>尝试检查描述文件或手动开始。";
+      console.warn("AR加载超时");
+      showManualStart();
+    }, 15000); // 15秒超时
+    
+    // 开始预加载描述文件
+    preloadDescriptors();
+  }
+  
+  // 检查所有必要组件是否就绪
+  function checkAllReady() {
+    if (descriptorsLoaded && cameraReady) {
+      loadingStatus.innerHTML = "所有组件已就绪，请对准图像标记...";
+      debugInfo.innerHTML = "状态: 就绪，请对准图像标记";
+      
+      // 如果10秒内仍未找到标记，提示用户
+      setTimeout(function() {
+        // 只在还未找到标记的情况下提示
+        if (arjsLoader.style.display !== 'none') {
+          loadingStatus.innerHTML += '<br><span class="error-message">长时间未识别到图像，请确认图像清晰可见</span>';
+          showManualStart();
+        }
+      }, 10000);
+    }
+  }
+  
+  // 初始化时的事件监听
+  window.addEventListener('load', () => {
+    if (window.location.protocol !== 'file:') {
+      debugInfo.innerHTML = "状态: 页面已加载，等待AR初始化...";
+      loadingStatus.innerHTML = "初始化摄像头和AR环境...";
+      console.log('页面已加载');
+      
+      // 检查WebGL支持
+      const canvas = document.createElement('canvas');
+      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!gl) {
+        const errMsg = "您的浏览器不支持WebGL，AR功能无法使用";
+        debugInfo.innerHTML = '<span class="error-message">' + errMsg + '</span>';
+        loadingStatus.innerHTML = '<span class="error-message">' + errMsg + '</span>';
+        console.error(errMsg);
+      }
+    }
+  });
+  
+  // 模型加载事件
+  document.addEventListener('model-loaded', (e) => {
+    console.log('3D模型加载成功', e);
+    debugInfo.innerHTML = "状态: 3D模型加载成功";
+    loadingStatus.innerHTML = "3D模型加载成功！";
+    
+    // 清除超时
+    if (loadingTimeout) {
+      clearTimeout(loadingTimeout);
+    }
+  });
+  
+  // 模型加载错误事件
+  document.querySelector('#model-entity').addEventListener('model-error', (e) => {
+    console.error('3D模型加载失败', e);
+    debugInfo.innerHTML = "状态: 3D模型加载失败";
+    loadingStatus.innerHTML = "3D模型加载失败！";
+    showManualStart();
+  });
+
+  // NFT标记事件
   document.querySelector('a-nft').addEventListener('markerFound', () => {
-    console.log('🎯 模型加载成功!');
+    console.log('🎯 识别到图像标记!');
+    debugInfo.innerHTML = "状态: 识别到图像标记 ✓";
+    // 隐藏加载界面
+    arjsLoader.style.display = 'none';
+    // 隐藏手动开始按钮
+    manualStartBtn.style.display = 'none';
+    
+    // 清除超时
+    if (loadingTimeout) {
+      clearTimeout(loadingTimeout);
+    }
   });
+  
   document.querySelector('a-nft').addEventListener('markerLost', () => {
-    console.log('📭 模型加载失败!');
+    console.log('📭 图像标记丢失!');
+    debugInfo.innerHTML = "状态: 图像标记丢失 ✗";
   });
+  
+  // 场景加载事件
+  document.querySelector('a-scene').addEventListener('loaded', function() {
+    console.log('A-Frame场景已加载');
+    debugInfo.innerHTML = "状态: A-Frame场景已加载";
+    loadingStatus.innerHTML = "场景已加载，等待识别图像...";
+  });
+  
+  // 添加对描述文件加载事件的专门处理
+  document.querySelector('a-nft').addEventListener('loaded', function() {
+    console.log('NFT组件已加载');
+    debugInfo.innerHTML = "状态: NFT组件已加载";
+    loadingStatus.innerHTML = "NFT组件已加载，尝试识别图像...";
+  });
+  
+  // AR初始化错误捕获
+  window.addEventListener('artoolkit-camera-error', function(error) {
+    console.error('AR Toolkit相机错误:', error);
+    debugInfo.innerHTML = "AR Toolkit相机错误: " + error;
+    loadingStatus.innerHTML = "相机初始化失败！";
+    showManualStart();
+  });
+  
+  window.addEventListener('artoolkit-nft-loaded', function() {
+    console.log('NFT标记数据加载完成');
+    debugInfo.innerHTML = "状态: NFT标记数据就绪，请对准图像";
+    loadingStatus.innerHTML = "标记数据就绪，请对准图像...";
+    descriptorsLoaded = true;
+    checkAllReady();
+  });
+  
+  // 摄像头权限事件
+  navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}})
+    .then(function(stream) {
+      debugInfo.innerHTML = "状态: 摄像头已启用";
+      loadingStatus.innerHTML = "摄像头已启用，准备识别图像...";
+      console.log('摄像头权限获取成功');
+      cameraReady = true;
+      checkAllReady();
+      
+      // 检查摄像头实际是否工作
+      const track = stream.getVideoTracks()[0];
+      if (!track || !track.enabled) {
+        console.warn('摄像头轨道未启用');
+        loadingStatus.innerHTML += '<br>警告: 摄像头可能未正常工作';
+      }
+    })
+    .catch(function(err) {
+      console.error('摄像头访问错误:', err);
+      debugInfo.innerHTML = "状态: 摄像头访问错误 - " + err.message;
+      loadingStatus.innerHTML = "摄像头访问错误！";
+      showManualStart();
+    });
 </script>
 </html>
