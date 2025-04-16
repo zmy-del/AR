@@ -59,6 +59,21 @@
     z-index: 10000;
     display: none;
   }
+  
+  .controls {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    background: rgba(0,0,0,0.5);
+    padding: 10px;
+    border-radius: 5px;
+  }
+  
+  .controls button {
+    margin: 5px;
+    padding: 5px 10px;
+  }
 </style>
 <script src="aframe-ar-nft.js"></script>
 
@@ -71,17 +86,28 @@
   <button id="manual-start" class="manual-start-btn">手动开始AR</button>
   
   <div id="debug-info" class="debug-info">状态: 初始化中...</div>
+  
+  <div class="controls">
+    <button id="toggle-debug">切换调试模式</button>
+    <button id="force-show">强制显示模型</button>
+    <button id="adjust-model">调整模型位置</button>
+  </div>
 
   <!-- a-frame scene -->
   <a-scene id="scene"
     vr-mode-ui="enabled: false;"
-    renderer="logarithmicDepthBuffer: true; antialias: true; precision: mediump;"
+    renderer="logarithmicDepthBuffer: true; antialias: true; precision: mediump; colorManagement: true; physicallyCorrectLights: true;"
     embedded
     arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3; maxDetectionRate: 60; canvasWidth: 1280; canvasHeight: 960;"
   >
-    <!-- a-nft is the anchor that defines an Image Tracking entity -->
-    <!-- on 'url' use the path to the Image Descriptors created before. -->
-    <!-- 路径不带文件拓展名！【注意】以网站的域名为相对路径 -->
+    <!-- 添加光源以确保模型可见 -->
+    <a-entity light="type: ambient; color: #FFF; intensity: 1.0"></a-entity>
+    <a-entity light="type: directional; color: #FFF; intensity: 1.0" position="0 1 1"></a-entity>
+    
+    <!-- 调试用几何体，用于确认场景渲染正常 -->
+    <a-box id="debug-box" position="0 0 -3" rotation="0 45 45" color="#4CC3D9" scale="0.2 0.2 0.2" visible="false"></a-box>
+
+    <!-- a-nft是图像跟踪锚点 -->
     <a-nft
       type="nft"
       url="descriptors/py/py"
@@ -90,18 +116,33 @@
       smoothTolerance=".01"
       smoothThreshold="3"
     >
-        <!-- as a child of the a-nft entity, you can define the content to show. here's a GLTF model entity -->
+        <!-- 作为a-nft的子元素，您可以定义要显示的内容。这里是一个GLTF模型实体 -->
         <a-entity
             id="model-entity"
             gltf-model="model/py/scene.gltf"
-            scale="0.8 0.8 0.8"
+            scale="1 1 1"
             position="0 0 0"
             rotation="-90 0 0"
+            material="opacity: 1; transparent: false; metalness: 0.5; roughness: 0.5"
         >
         </a-entity>
+        
+        <!-- 添加一个调试立方体帮助确认跟踪位置 -->
+        <a-box color="red" scale="0.1 0.1 0.1" position="0 0 0"></a-box>
     </a-nft>
-    <!-- static camera that moves according to the device movemenents -->
-    <a-entity camera="fov: 75; near: 0.1; far: 1000"></a-entity>
+    
+    <!-- 用于直接显示模型的备用实体，不依赖于NFT跟踪 -->
+    <a-entity
+        id="fallback-model"
+        gltf-model="model/py/scene.gltf"
+        scale="0.5 0.5 0.5"
+        position="0 0 -2"
+        rotation="-90 0 0"
+        visible="false"
+    ></a-entity>
+    
+    <!-- 静态相机，根据设备移动而移动 -->
+    <a-entity id="camera" camera="fov: 75; near: 0.1; far: 1000"></a-entity>
   </a-scene>
 </body>
 <script>
@@ -110,9 +151,59 @@
   const loadingProgress = document.getElementById('loading-progress');
   const manualStartBtn = document.getElementById('manual-start');
   const arjsLoader = document.querySelector('.arjs-loader');
+  const modelEntity = document.getElementById('model-entity');
+  const fallbackModel = document.getElementById('fallback-model');
+  const debugBox = document.getElementById('debug-box');
+  const toggleDebugBtn = document.getElementById('toggle-debug');
+  const forceShowBtn = document.getElementById('force-show');
+  const adjustModelBtn = document.getElementById('adjust-model');
+  
   let descriptorsLoaded = false;
   let cameraReady = false;
   let loadingTimeout = null;
+  let modelLoaded = false;
+  let debugMode = false;
+  
+  // 调试模式切换
+  toggleDebugBtn.addEventListener('click', function() {
+    debugMode = !debugMode;
+    debugBox.setAttribute('visible', debugMode);
+    debugInfo.style.fontSize = debugMode ? '18px' : '14px';
+    debugInfo.innerHTML += '<br>调试模式: ' + (debugMode ? '开启' : '关闭');
+  });
+  
+  // 强制显示模型
+  forceShowBtn.addEventListener('click', function() {
+    arjsLoader.style.display = 'none';
+    fallbackModel.setAttribute('visible', true);
+    debugInfo.innerHTML = '强制显示模型模式';
+  });
+  
+  // 调整模型位置
+  let positionIndex = 0;
+  const positions = [
+    {position: "0 0 0", scale: "1 1 1", rotation: "-90 0 0"},
+    {position: "0 0.5 0", scale: "1.5 1.5 1.5", rotation: "-90 0 0"},
+    {position: "0 0 0.5", scale: "0.8 0.8 0.8", rotation: "-90 0 0"},
+    {position: "0 0 0", scale: "2 2 2", rotation: "0 0 0"},
+    {position: "0 0 0", scale: "1 1 1", rotation: "0 -90 0"}
+  ];
+  
+  adjustModelBtn.addEventListener('click', function() {
+    positionIndex = (positionIndex + 1) % positions.length;
+    const newPos = positions[positionIndex];
+    
+    modelEntity.setAttribute('position', newPos.position);
+    modelEntity.setAttribute('scale', newPos.scale);
+    modelEntity.setAttribute('rotation', newPos.rotation);
+    
+    // 同时调整后备模型
+    fallbackModel.setAttribute('position', `0 0 -${2 + positionIndex}`);
+    fallbackModel.setAttribute('scale', newPos.scale);
+    fallbackModel.setAttribute('rotation', newPos.rotation);
+    
+    debugInfo.innerHTML = `模型调整: 位置=${newPos.position}, 缩放=${newPos.scale}, 旋转=${newPos.rotation}`;
+  });
   
   // 预加载NFT描述文件检查
   function preloadDescriptors() {
@@ -171,6 +262,11 @@
       arjsLoader.style.display = 'none';
       manualStartBtn.style.display = 'none';
       debugInfo.innerHTML = "状态: 手动启动AR";
+      
+      // 直接显示备用模型
+      setTimeout(() => {
+        fallbackModel.setAttribute('visible', true);
+      }, 1000);
     });
   }
   
@@ -229,16 +325,44 @@
     }
   });
   
+  // 检查并确保模型可见的函数
+  function ensureModelVisible(entity) {
+    // 确保模型有材质
+    if (!entity.getAttribute('material')) {
+      console.log('添加默认材质到模型');
+      entity.setAttribute('material', 'opacity: 1; transparent: false; color: #FFF;');
+    }
+    
+    // 记录模型加载成功
+    modelLoaded = true;
+    
+    // 尝试确保NFT识别后的模型显示
+    setTimeout(() => {
+      if (arjsLoader.style.display === 'none' && !debugInfo.innerHTML.includes('识别到图像标记')) {
+        debugInfo.innerHTML = "模型已加载，但可能未显示。尝试调整位置或使用强制显示按钮。";
+        console.log('模型已加载，但可能未显示');
+      }
+    }, 5000);
+  }
+  
   // 模型加载事件
   document.addEventListener('model-loaded', (e) => {
     console.log('3D模型加载成功', e);
     debugInfo.innerHTML = "状态: 3D模型加载成功";
     loadingStatus.innerHTML = "3D模型加载成功！";
     
+    // 确保模型可见
+    ensureModelVisible(e.detail.target || modelEntity);
+    
     // 清除超时
     if (loadingTimeout) {
       clearTimeout(loadingTimeout);
     }
+  });
+  
+  // 为后备模型也添加加载事件
+  fallbackModel.addEventListener('model-loaded', function() {
+    console.log('后备模型加载成功');
   });
   
   // 模型加载错误事件
@@ -257,6 +381,17 @@
     arjsLoader.style.display = 'none';
     // 隐藏手动开始按钮
     manualStartBtn.style.display = 'none';
+    
+    // 如果模型已加载但未显示，显示后备模型
+    if (modelLoaded && !modelEntity.object3D.visible) {
+      setTimeout(() => {
+        console.log('尝试使模型可见');
+        modelEntity.setAttribute('visible', true);
+        modelEntity.components.material.material.transparent = false;
+        modelEntity.components.material.material.opacity = 1.0;
+        modelEntity.components.material.material.needsUpdate = true;
+      }, 500);
+    }
     
     // 清除超时
     if (loadingTimeout) {
