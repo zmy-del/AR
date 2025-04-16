@@ -182,11 +182,11 @@
   // 调整模型位置
   let positionIndex = 0;
   const positions = [
+    {position: "0 0.5 0", scale: "1.5 1.5 1.5", rotation: "60 -10 0"},
     {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"},
+    {position: "0 0.5 0", scale: "1 1 1", rotation: "60 -10 0"},
     {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"},
-    {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"},
-    {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"},
-    {position: "0 0.5 0", scale: "0.5 0.5 0.5", rotation: "60 -10 0"}
+    {position: "0 0.5 0", scale: "0.3 0.3 0.3", rotation: "60 -10 0"}
   ];
   
   adjustModelBtn.addEventListener('click', function() {
@@ -302,7 +302,7 @@
           loadingStatus.innerHTML += '<br><span class="error-message">长时间未识别到图像，请确认图像清晰可见</span>';
           showManualStart();
         }
-      }, 10000);
+      }, 5000);
     }
   }
   
